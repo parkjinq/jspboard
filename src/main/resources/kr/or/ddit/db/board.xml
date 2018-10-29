@@ -1,0 +1,174 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper
+  PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+  "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="board">
+	
+	<!-- 해당 게시물 불러오는 쿼리문 -->
+	<select id="selectBoardById" parameterType="String" resultType="boardVO">
+		SELECT * FROM board WHERE bd_id = #{bd_id}
+	</select>
+	
+	<!-- 좌측메뉴 게시판리스트 불러오는 쿼리문 -->
+	<select id="selectBoardAllLeft" resultType="boardVO">
+		SELECT * FROM board WHERE bd_use = 'Y'
+	</select>
+	
+	<!-- 모든 게시판리스트 불러오는 쿼리문 -->
+	<select id="selectBoardAll" resultType="boardVO">
+		SELECT * FROM board
+	</select>
+	
+	<!-- 해당 게시판의 게시글리스트 불러오는 쿼리문 -->
+	<select id="selectBoardPosts" parameterType="String" resultType="postsVO">
+		SELECT * FROM posts WHERE bd_id = #{bd_id}
+	</select>
+	
+	<!-- 해당 게시판의 총 게시글 수를 불러오는 쿼리문 -->
+	<select id="getNumBoardPosts" parameterType="String" resultType="Integer">
+		SELECT COUNT(*) FROM posts WHERE bd_id = #{bd_id}
+	</select>
+	
+	<!-- 해당게시판의 게시글리스트를 해당 페이지의 페이지크기만큼 가져오는 쿼리문 -->
+	<select id="selectBoardPostsPage" parameterType="Map" resultType="postsVO">
+		SELECT *
+		FROM    (SELECT ROWNUM 			AS rnum
+		                , a.ps_id 		AS ps_id
+		                , a.p_ps_title 	AS ps_title
+		                , a.userid 		AS userid
+		                , a.ps_date 	AS ps_date
+		                , a.ps_del		AS ps_del
+		        FROM    (SELECT  posts.*
+		                FROM    (select lpad('└ ',(level-1)*3, '　') || ps_title AS p_ps_title, posts.*, level 
+		                        from posts
+		                        where bd_id = #{bd_id}
+		                        start with ps_id2 is null
+		                        connect by prior ps_id = ps_id2
+		                        order siblings by groupid desc, ps_date asc) posts) a)
+		WHERE   rnum BETWEEN ${pageVO.page}*${pageVO.pageSize}-(${pageVO.pageSize}-1) AND ${pageVO.page}*${pageVO.pageSize}
+	</select>
+	
+	<!-- 새로운 게시판을 생성하는 쿼리문 -->
+	<insert id="insertBoard" parameterType="boardVO">
+		INSERT INTO board VALUES ('bd'||LPAD(BOARD_SEQ.NEXTVAL,3,'0'), #{bd_title}, #{bd_use}, SYSDATE, #{userid})
+	</insert>
+	
+	<!-- 해당 게시판 정보를 수정하는 쿼리문 -->
+	<update id="updateBoard" parameterType="boardVO">
+		UPDATE	board
+		SET		bd_title = #{bd_title},
+				bd_use = #{bd_use}
+		WHERE	bd_id = #{bd_id}
+	</update>
+	
+	<!-- 선택한 게시글 불러오는 쿼리문 -->
+	<select id="selectPostsById" parameterType="String" resultType="postsVO">
+		SELECT * FROM posts WHERE ps_id = #{ps_id}
+	</select>
+	
+	<!-- 선택한 게시글 댓글 불러오는 쿼리문 -->
+	<select id="selectCommentsById" parameterType="String" resultType="commentsVO">
+		SELECT /*+INDEX (comments idx_comment_01)*/* FROM comments WHERE ps_id = #{ps_id}
+	</select>
+	
+	<!-- 선택한 게시글 첨부파일 불러오는 쿼리문 -->
+	<select id="selectAttachmentsById" parameterType="String" resultType="attachmentsVO">
+		SELECT /*+ INDEX (attachments idx_attach_01)*/* FROM attachments WHERE ps_id = #{ps_id}
+ 	</select>
+ 	
+<!--  	<parameterMap type="Map" id="setComments"> -->
+<!--  		<parameter property="cm_id" /> -->
+<!--  		<parameter property="ps_id" /> -->
+<!--  		<parameter property="cm_cnt" jdbcType="CLOB" javaType="java.lang.String"/> -->
+<!--  		<parameter property="cm_date" /> -->
+<!--  		<parameter property="userid" /> -->
+<!--  	</parameterMap> -->
+ 	
+ 	<!-- 댓글 생성하는 쿼리문 -->
+ 	<insert id="insertComments" parameterType="commentsVO">
+ 		INSERT INTO comments VALUES ('cm'||LPAD(COMMENTS_SEQ.NEXTVAL,3,'0'), #{ps_id}, #{cm_cnt}, SYSDATE, #{userId}, 'N')
+ 	</insert>
+ 	
+ 	<!-- 댓글 삭제처리하는 쿼리문(update) -->
+ 	<update id="deleteComments" parameterType="commentsVO">
+ 		UPDATE	comments
+		SET		cm_del = 'Y'
+		WHERE	cm_id = #{cm_id}
+ 	</update>
+ 	
+ 	<!-- 새 게시글 생성하는 쿼리문 -->
+	<insert id="insertPosts" parameterType="postsVO">
+		<selectKey keyProperty="ps_id" resultType="String" order="BEFORE">
+			SELECT POSTS_SEQ.NEXTVAL FROM DUAL
+		</selectKey>
+		INSERT INTO posts 
+		VALUES('ps'||LPAD(${ps_id},3,'0')
+				, #{bd_id}
+				, SYSDATE
+				, #{ps_title}
+				, #{ps_cnt}
+				, #{ps_id2}
+				, #{userid}
+				, ${ps_id}
+				, 'N')
+	</insert>
+	
+	<!-- 답 게시글 생성하는 쿼리문 -->
+	<insert id="insertPostsRe" parameterType="postsVO">
+		<selectKey keyProperty="ps_id" resultType="String" order="BEFORE">
+			SELECT POSTS_SEQ.NEXTVAL FROM DUAL
+		</selectKey>
+		INSERT INTO posts 
+		VALUES('ps'||LPAD(${ps_id},3,'0')
+				, #{bd_id}
+				, SYSDATE
+				, #{ps_title}
+				, #{ps_cnt}
+				, #{ps_id2}
+				, #{userid}
+				, null
+				, 'N')
+	</insert>
+	
+ 	<!-- 첨부파일 생성하는 쿼리문 -->
+	<insert id="insertAttachments" parameterType="attachmentsVO">
+		INSERT INTO attachments VALUES('att'||LPAD(ATTACHMENT_SEQ.NEXTVAL,3,'0'), #{ps_id}, #{att_path})
+	</insert>
+	
+	<!-- 첨부파일 삭제하는 쿼리문 -->
+	<delete id="deleteAttachments" parameterType="String">
+		DELETE FROM attachments
+		WHERE att_id = #{att_id}
+	</delete>
+	
+	<!-- 게시글 수정하는 쿼리문 -->
+	<update id="updatePosts" parameterType="postsVO">
+		UPDATE	posts
+		SET		ps_title = #{ps_title}
+				, ps_cnt = #{ps_cnt}
+		WHERE	ps_id = #{ps_id}
+	</update>
+	
+	<!-- 게시글 삭제여부 Y로 수정하는 쿼리문 -->
+	<update id="deletePosts" parameterType="String">
+		UPDATE 	posts
+		SET		ps_del = 'Y'
+		WHERE	ps_id = #{ps_id}
+	</update>
+	
+</mapper>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
